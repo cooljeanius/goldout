@@ -63,7 +63,7 @@ static void usage(const char * inProcesspath)
 		   "\n");
 }
 
-int fixUpResourceFork(char * inADFFileName,char * inADFPath)
+static int fixUpResourceFork(char *inADFFileName, char *inADFPath)
 {
     if (inADFFileName==NULL || inADFPath==NULL)
         return 0;
@@ -92,7 +92,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
     uint32_t tMagicNumber;
     uint32_t tVersionNumber;
     
-    ssize_t tReadSize=read(tFileDescriptor,tBuffer,sizeof(tBuffer));
+    ssize_t tReadSize = read(tFileDescriptor, tBuffer, sizeof(tBuffer));
     
     if (tReadSize<0)
     {
@@ -218,10 +218,12 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
     {
         uint8_t tEntryBuffer[12];
         
-        ssize_t tReadSize=read(tFileDescriptor,tEntryBuffer,sizeof(tEntryBuffer));
+        ssize_t tReadSize = read(tFileDescriptor,
+                                 tEntryBuffer, sizeof(tEntryBuffer));
         
         if (tReadSize<0)
         {
+            free(tEntriesArray);
             close(tFileDescriptor);
             
 			switch (errno)
@@ -250,6 +252,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
         
         if (tReadSize!=12)
         {
+            free(tEntriesArray);
             close(tFileDescriptor);
             
             fprintf(stderr, "Error processing \"%s\" (Missing or incomplete entry descriptor in AppleDouble file)\n", inADFPath);
@@ -310,6 +313,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
     
     if (tNeedsToFixUp==false)
     {
+        free(tEntriesArray);
         close(tFileDescriptor);
         
         if (gNoDelete==false)
@@ -340,6 +344,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
 	
     if (tDataFileDescriptor<0)
     {
+        free(tEntriesArray);
 		switch(errno)
 		{
 			case ENOENT:
@@ -383,17 +388,19 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
                 
                 lseek(tFileDescriptor, tEntry.entryOffset, SEEK_SET);
                 
-                do
-                {
+                do {
                     uint32_t tToReadSize=EXTENDED_ATTRIBUTES_BUFFER_SIZE;
                     
                     if (tToReadSize>tRemainingData)
                         tToReadSize=tRemainingData;
                     
-                    ssize_t tReadSize=read(tFileDescriptor,tExtendedAttributesBuffer,tToReadSize);
+                    ssize_t tReadSize = read(tFileDescriptor,
+                                             tExtendedAttributesBuffer,
+                                             tToReadSize);
                     
                     if (tReadSize<0)
                     {
+                        free(tEntriesArray);
 						close(tDataFileDescriptor);
                         
                         close(tFileDescriptor);
@@ -424,6 +431,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
                     
                     if (tReadSize!=tToReadSize)
                     {
+                        free(tEntriesArray);
                         fprintf(stderr, "Error processing \"%s\" (The AppleDouble file total size is smaller than what the header states)\n", inADFPath);
                         
                         close(tDataFileDescriptor);
@@ -433,10 +441,10 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
                         return 0;
                     }
                     
-                    if (fsetxattr(tDataFileDescriptor, XATTR_RESOURCEFORK_NAME, tExtendedAttributesBuffer, tReadSize, tAlreadyReadSize, 0)!=0)
+                    if (fsetxattr(tDataFileDescriptor, XATTR_RESOURCEFORK_NAME, tExtendedAttributesBuffer, tReadSize, tAlreadyReadSize, 0) != 0)
                     {
                         // A COMPLETER
-                        
+                        free(tEntriesArray);
                         close(tDataFileDescriptor);
                         
                         close(tFileDescriptor);
@@ -446,8 +454,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
                     
                     tAlreadyReadSize+=tReadSize;
                     tRemainingData-=tReadSize;
-                }
-                while (tRemainingData>0);
+                } while (tRemainingData>0);
             }
                 break;
                 
@@ -467,12 +474,14 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
 						// A COMPLETER
 					}
                     
-					ssize_t tReadSize=FINDER_INFO_SIZE;
+					ssize_t tReadSize = FINDER_INFO_SIZE;
 					
-					tReadSize=read(tFileDescriptor,tExtendedAttributesBuffer,tReadSize);
+					tReadSize = read(tFileDescriptor, tExtendedAttributesBuffer,
+                                     tReadSize);
                     
                     if (tReadSize<0)
                     {
+                        free(tEntriesArray);
 						switch (errno)
 						{
 							case EIO:
@@ -503,6 +512,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
                     
                     if (tReadSize!=FINDER_INFO_SIZE)
                     {
+                        free(tEntriesArray);
                         fprintf(stderr, "Error processing \"%s\" (The AppleDouble file total size is smaller than what the header states)\n", inADFPath);
                         
                         close(tDataFileDescriptor);
@@ -515,7 +525,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
                     if (fsetxattr(tDataFileDescriptor, XATTR_FINDERINFO_NAME, tExtendedAttributesBuffer, FINDER_INFO_SIZE, 0, 0)!=0)
                     {
                         // A COMPLETER
-                        
+                        free(tEntriesArray);
                         close(tDataFileDescriptor);
                         
                         close(tFileDescriptor);
@@ -537,7 +547,8 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
         tEntryIndex++;
         
     }
-    
+
+    free(tEntriesArray);
     close(tDataFileDescriptor);
     
     close(tFileDescriptor);
@@ -566,7 +577,7 @@ int fixUpResourceFork(char * inADFFileName,char * inADFPath)
     return 0;
 }
 
-int fixUpResourceForks(char * const inPath)
+static int fixUpResourceForks(char *const inPath)
 {
     char tResolvedPath[PATH_MAX+1];
     
@@ -735,16 +746,14 @@ int main(int argc, const char * argv[])
     
     int tIndex=0;
     
-    do
-    {
+    do {
         int tStatus=fixUpResourceForks((char * const)tArguments[tIndex]);
         
         if (tStatus!=0)
             exit(EXIT_FAILURE);
         
         tIndex++;
-    }
-    while (tIndex<argc);
+    } while (tIndex<argc);
     
     return 0;
 }
